@@ -1,0 +1,53 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+
+Resources:
+  IAMGroup:
+    Type: AWS::IAM::Group
+    Properties: 
+      GroupName: core-dns
+      Path: /
+      Policies: 
+        - PolicyName: StackModify
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+                - cloudformation:*
+              Resource: arn:aws:cloudformation:*:*:stack/dns*/*
+            - Effect: Deny
+              Action:
+                - cloudformation:DeleteStack
+              Resource: '*'
+        - PolicyName: Route53Modify
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+                - route53:Create*
+                - route53:List*
+                - route53:Get*
+                - route53:Update*
+                - route53:Change*
+              Resource: '*'
+            - Effect: Deny
+              Action:
+                - route53:Delete*
+              Resource: '*'
+        - PolicyName: VPCDescribe
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+                - ec2:DescribeVpcs
+              Resource: '*'
+
+  AddUserToGroup:
+    Type: AWS::IAM::UserToGroupAddition
+    Properties: 
+      GroupName: !Ref IAMGroup
+      Users: 
+        - svc-dns # Manually created IAM user

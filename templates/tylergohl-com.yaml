@@ -1,0 +1,20 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+
+Resources:
+  TylergohlCom:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      HostedZoneConfig:
+        Comment: "Hosted zone fort tylergohl.com"
+      Name: tylergohl.com
+  DefiOnboardingComRSG:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !Ref TylergohlCom
+      RecordSets:
+      - Name: testrecord.tylergohl.com
+        Type: CNAME
+        TTL: '600'
+        ResourceRecords:
+          - google.com
