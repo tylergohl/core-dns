@@ -1,0 +1,101 @@
+name: pull_request
+
+on: [pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: cfn-lint
+        uses: scottbrenner/cfn-lint-action@master
+        with:
+          args: "**/*.yaml"
+
+  get-stack-list:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      # Get list of files in templates folder, remove their extensions (sed statement), and convert to JSON (jq statement)
+      # Then set the result as an output to be used by follow up jobs
+      - id: set-matrix
+        run: echo "::set-output name=matrix::$(ls ./templates -1 | sed 's/\.[^.]*$//' | jq -R -s -c 'split("\n")[:-1]')"
+
+  change-set-comment:
+    runs-on: ubuntu-latest
+    needs: get-stack-list
+    strategy:
+      matrix:
+        zone: ${{ fromJSON(needs.get-stack-list.outputs.matrix) }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+      
+      - name: configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Check if Stack Exists
+        id: check-stack-exists
+        run: |
+          if ! aws cloudformation describe-stacks --stack-name dns-${{ matrix.zone }} ; then
+            # stack does not exist, set a variable that skips the rest of the steps
+            echo '::set-output name=STACK_EXISTS::false'
+          else
+            # Stack exists
+            echo '::set-output name=STACK_EXISTS::true'
+          fi
+
+      - name: Post comment for new stack
+        if: steps.check-stack-exists.outputs.STACK_EXISTS == 'false'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          message: |
+            # New Stack :point_down:
+            :rocket: Merging this PR will create a new stack - `dns-${{ matrix.zone }}` :rocket:
+
+      - name: describe change set
+        if: steps.check-stack-exists.outputs.STACK_EXISTS == 'true'
+        id: describe-change-set
+        uses: Blue-Pix/describe-cfn-change-set@v2.1
+        with:
+          stack_name: dns-${{ matrix.zone }}
+          template_body: ./templates/${{ matrix.zone }}.yaml
+
+      - name: archive diff
+        if: steps.check-stack-exists.outputs.STACK_EXISTS == 'true'
+        uses: actions/upload-artifact@v1
+        with:
+          name: diff
+          path: ${{ steps.describe-change-set.outputs.diff_file_path }}
+
+      - name: Download diff markdown
+        if: steps.check-stack-exists.outputs.STACK_EXISTS == 'true'
+        uses: actions/download-artifact@v1
+        with:
+          name: diff
+
+      - name: Post comments
+        if: steps.check-stack-exists.outputs.STACK_EXISTS == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          URL: ${{ github.event.pull_request.comments_url }}
+          FILE_PATH: ${{ steps.describe-change-set.outputs.diff_file_path }}
+        run: |
+          cat ${FILE_PATH} | xargs echo
+          if grep -q 'no change\.' "${FILE_PATH}"; then
+            echo 'Not posting a change set for a resource with no change'
+          else
+            curl -X POST \
+                -H "Authorization: token ${GITHUB_TOKEN}" \
+                -d "{\"body\": \"$(cat ${FILE_PATH} | xargs echo)\"}" \
+                ${URL}
+          fi
