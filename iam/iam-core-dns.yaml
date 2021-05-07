@@ -50,4 +50,4 @@ Resources:
     Properties: 
       GroupName: !Ref IAMGroup
       Users: 
-        - svc.dns # Manually created IAM user
+        - svc-dns # Manually created IAM user
