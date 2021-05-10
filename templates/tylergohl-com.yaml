@@ -6,15 +6,18 @@ Resources:
     Type: AWS::Route53::HostedZone
     Properties:
       HostedZoneConfig:
-        Comment: "Hosted zone fort tylergohl.com"
+        Comment: "Hosted zone for tylergohl.com"
       Name: tylergohl.com
   DefiOnboardingComRSG:
     Type: AWS::Route53::RecordSetGroup
     Properties:
       HostedZoneId: !Ref TylergohlCom
       RecordSets:
-      - Name: testrecord.tylergohl.com
-        Type: CNAME
+      - Name: aws.tylergohl.com
+        Type: NS
         TTL: '600'
         ResourceRecords:
-          - google.com
+          - ns-1769.awsdns-29.co.uk
+          - ns-500.awsdns-62.com
+          - ns-1231.awsdns-25.org
+          - ns-593.awsdns-10.net
